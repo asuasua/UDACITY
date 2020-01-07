@@ -1,0 +1,1325 @@
+
+---
+title: "Wine Data Exploration"
+author: "Alex"
+date: "February 23, 2018"
+output: 
+  html_document:
+  toc: true
+  toc_depth: 4
+  number_sections: true
+  theme: united
+  hightlight: tango
+  css: my.css
+---
+
+
+
+### Import Data and Libraries
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+### Load package
+
+library(ggplot2)
+library(dplyr)
+library(xlsx)
+library(reshape)
+library(scales)
+library(memisc)
+library(GGally)
+library(caret)
+library(ROCR)
+
+
+wine = read.csv(file='totalWine.csv')
+wine = wine[, -1]
+
+```
+
+
+> This data consists of 1,599 red and 4,898 white wines sampled in 2009. 
+Each sample contains 12 features, plus a quality rating between 0 and 10. 
+The basic componenets measured were acidity, sweetness, saltiness, sulphurity, 
+pH, alcohol% plus an identification of red or white. 
+
+
+# Univariate Plots
+
+```{r echo=TRUE}
+
+
+dim(wine)
+
+```
+
+
+```{r echo=TRUE}
+
+str(wine)
+
+```
+
+
+
+```{r}
+
+summary(wine)
+
+```
+
+> Upon first glance: 
+> Featues 1-6, 9-11 appear to be skewed positively. 
+> Featues 7 and 12(quality score) appear slightly negatively skewed while 
+feature 8 (density) appears uniformly distributed. Lets look a little closer at
+each of these features individually. 
+
+
+
+```{r, echo=FALSE}
+
+ggplot(data=wine, aes(x=fixed.acidity)) +
+  geom_histogram(fill='lightblue', 
+                 color='black', bins=100) +
+  xlab('Fixed Acidity (g /'~dm^3~')') +
+  scale_x_continuous(breaks=seq(3, 16, 1)) +
+  #geom_vline(xintercept = mean(wine$fixed.acidity), color='red', size=2) +
+  #geom_vline(xintercept = median(wine$fixed.acidity), color='orange', size=2) +
+  ylab('Count') +
+  scale_y_continuous(labels = function(x) format(x, big.mark = ",", 
+                                                 scientific=FALSE)) +
+  ggtitle('Distribution of Fixed Acidity') +
+  theme(plot.title = element_text(hjust = 0.5, size=15))
+
+
+```
+
+> The distribution is sligthly positively skewed.
+
+
+```{r echo=FALSE}
+
+summary(wine$fixed.acidity)
+
+```
+
+
+
+
+
+
+```{r echo=FALSE}
+
+
+ggplot(data=wine, aes(x=volatile.acidity)) +
+  geom_histogram(fill=I('#FF6666'), 
+                 color='black', bins=100) +
+  xlab('Volatile Acidity (g /'~dm^3~')') +
+  scale_x_continuous(breaks=seq(0, 1.6, 0.2)) +
+  #geom_vline(xintercept = mean(wine$fixed.acidity), color='red', size=2) +
+  #geom_vline(xintercept = median(wine$fixed.acidity), color='orange', size=2) +
+  ylab('Count') +
+  scale_y_continuous(labels = function(x) format(x, big.mark = ",", 
+                                                 scientific=FALSE)) +
+  ggtitle('Distribution of Volatile Acidity') +
+  theme(plot.title = element_text(hjust = 0.5, size=15))
+
+
+```
+
+> It looks like there are a couple of outliers
+
+
+```{r echo=FALSE}
+summary(wine$volatile.acidity)
+```
+
+```{r echo=TRUE}
+quantile(wine$volatile.acidity, probs = 0.999)
+```
+
+
+> The max value lies over twice IQR distance away from the 99.9th percentile
+value. 
+
+
+
+
+
+
+
+
+```{r echo=FALSE}
+
+ggplot(data=wine, aes(x=citric.acid)) +
+  geom_histogram(fill=I('#FFFF66'), color='black', bins=100)+ #binwidth = 0.05) +
+  xlab('Citric Acid (g /'~dm^3~')') +
+  scale_x_continuous(breaks=seq(0, 1.7, 0.2)) +
+  #geom_vline(xintercept = mean(wine$fixed.acidity), color='red', size=2) +
+  #geom_vline(xintercept = median(wine$fixed.acidity), color='orange', size=2) +
+  ylab('Count') +
+  scale_y_continuous(labels = function(x) format(x, big.mark = ",", 
+                                                 scientific=FALSE)) +
+  ggtitle('Distribution of Citric Acid') +
+  theme(plot.title = element_text(hjust = 0.5, size=15))
+
+
+
+```
+
+> The distribution of citric acid appears slightly normally distributed about
+its mean. 
+
+
+
+
+```{r echo=FALSE}
+
+ggplot(data=wine, aes(x=residual.sugar)) +
+  geom_histogram(fill=I('#CC9966'), color='black', bins=100) +#binwidth = 0.5) +
+  xlab('Residual Sugar (g /'~dm^3~')') +
+  scale_x_continuous(breaks=seq(0, 66, 8)) +
+  #geom_vline(xintercept = mean(wine$fixed.acidity), color='red', size=2) +
+  #geom_vline(xintercept = median(wine$fixed.acidity), color='orange', size=2) +
+  ylab('Count') +
+  scale_y_continuous(labels = function(x) format(x, big.mark = ",", 
+                                                 scientific=FALSE)) +
+  ggtitle('Distribution of Residual Sugar') +
+  theme(plot.title = element_text(hjust = 0.5, size=15))
+
+
+
+
+
+```
+
+> Theres a much wider range of sugar densities than any of the acidic densities.
+The max value for residual sugar is approximately 11x greater than the mean. 
+The acidic values saw max values approximately 2 - 3 times greater than their 
+means. Lets take the log10 distribution of residual sugar.
+
+
+```{r echo=FALSE, message = FALSE, warning=FALSE}
+
+#,
+ggplot(data=wine, aes(x=residual.sugar)) +
+  geom_histogram(fill = I('#CC9966'), color='black', bins=100)+ #binwidth = 0.01) +
+  xlab('Residual Sugar (g /'~dm^3~')') +
+  scale_x_continuous(breaks=c(-2, 0, 2, 4, 8, 24, 66), trans=log10_trans()) +
+  #geom_vline(xintercept = mean(wine$fixed.acidity), color='red', size=2) +
+  #geom_vline(xintercept = median(wine$fixed.acidity), color='orange', size=2) +
+  ylab('Count') +
+  scale_y_continuous(labels = function(x) format(x, big.mark = ",", 
+                                                 scientific=FALSE)) +
+  ggtitle('Distribution of Log10Residual Sugar') +
+  theme(plot.title = element_text(hjust = 0.5, size=15))
+
+
+
+```
+
+> Here we see that there is a slight bimodal distribution with peaks at around 
+2 g/dL^3 and at 8 g/dL^3. The outliers above 24 g/dm^3 are more visible after
+the Log10 transformation.
+
+```{r echo=FALSE}
+summary(wine$residual.sugar)
+```
+
+
+
+
+
+```{r echo=FALSE}
+
+
+ggplot(data=wine, aes(x=chlorides)) +
+  geom_histogram(fill=I('#CCCFFF'), color='black', bins=100)+#binwidth = 0.005) +
+  xlab('Chlorides (g /'~dm^3~')') +
+  scale_x_continuous(breaks=seq(0, 0.62, 0.05)) +
+  #geom_vline(xintercept = mean(wine$fixed.acidity), color='red', size=2) +
+  #geom_vline(xintercept = median(wine$fixed.acidity), color='orange', size=2) +
+  ylab('Count') +
+  scale_y_continuous(labels = function(x) format(x, big.mark = ",", 
+                                                 scientific=FALSE)) +
+  ggtitle('Distribution of Chrlorides') +
+  theme(plot.title = element_text(hjust = 0.5, size=15))
+
+
+```
+
+> This distribution looks very similar to that of the Residual Sugar, except 
+with more outliers. 
+
+```{r echo=FALSE}
+summary(wine$chlorides)
+
+```
+
+
+
+
+```{r echo=FALSE}
+
+
+ggplot(data=subset(wine,!is.na(chlorides)), aes(x=chlorides)) +
+  geom_histogram(fill=I('#CCCFFF'), color='black', bins=100)+#binwidth = 0.01) +
+  xlab('Chlorides (g /'~dm^3~')') +
+  scale_x_continuous(trans = log10_trans(), breaks=c(seq(0, 0.12, 0.02), 0.01,
+                                                    0.16, 0.24, 0.36, 0.48, 0.60)) +
+  #geom_vline(xintercept = mean(wine$fixed.acidity), color='red', size=2) +
+  #geom_vline(xintercept = median(wine$fixed.acidity), color='orange', size=2) +
+  ylab('Count') +
+  scale_y_continuous(labels = function(x) format(x, big.mark = ",", 
+                                                 scientific=FALSE)) +
+  ggtitle('Distribution of Log10 Chrlorides') +
+  theme(plot.title = element_text(hjust = 0.5, size=15))
+
+
+```
+
+> After taking transforming the distribution, the outlier values appear more 
+amplified. 
+
+
+
+```{r echo=FALSE}
+
+ggplot(data=wine, aes(x=free.sulfur.dioxide)) +
+  geom_histogram(fill=I('#33FF99'), color='black', bins=100) + #binwidth = 5) +
+  xlab('Free Sulfur Dioxide (mg /'~dm^3~')') +
+  scale_x_continuous() +
+  #geom_vline(xintercept = mean(wine$fixed.acidity), color='red', size=2) +
+  #geom_vline(xintercept = median(wine$fixed.acidity), color='orange', size=2) +
+  ylab('Count') +
+  scale_y_continuous(labels = function(x) format(x, big.mark = ",", 
+                                                 scientific=FALSE)) +
+  ggtitle('Distribution of Free Sulfur Dioxide') +
+  theme(plot.title = element_text(hjust = 0.5, size=15))
+
+
+```
+
+```{r echo=FALSE}
+
+summary(wine$free.sulfur.dioxide)
+
+```
+
+
+```{r echo=TRUE}
+quantile(wine$free.sulfur.dioxide, probs = 0.999)
+
+```
+
+
+> Again, the distribution looks like a decay function, with serveral extreme outliers. And the maxium value is over triple IQR distance away from the 99.9th 
+percentile value. 
+
+
+
+
+```{r echo=FALSE}
+
+ggplot(data=wine, aes(x=total.sulfur.dioxide)) +
+  geom_histogram(fill=I('#33FF99'), color='black', bins=100) + #binwidth = 5) +
+  xlab('Total Sulfur Dioxide (mg /'~dm^3~')') +
+  scale_x_continuous() +
+  #geom_vline(xintercept = mean(wine$fixed.acidity), color='red', size=2) +
+  #geom_vline(xintercept = median(wine$fixed.acidity), color='orange', size=2) +
+  ylab('Count') +
+  scale_y_continuous(labels = function(x) format(x, big.mark = ",", 
+                                                 scientific=FALSE)) +
+  ggtitle('Distribution of Total Sulfur Dioxide') +
+  theme(plot.title = element_text(hjust = 0.5, size=15))
+
+
+```
+
+```{r echo=FALSE}
+
+summary(wine$total.sulfur.dioxide)
+
+```
+
+> In this case, the distribution is slightly bimodal with several outliers. 
+
+
+
+
+```{r echo=FALSE}
+
+ggplot(data=wine, aes(x=density)) +
+  geom_histogram(fill=I('#0000FF'), color='white', bins=100) + #binwidth = 5) +
+  xlab('Water (g /'~cm^3~')') +
+  scale_x_continuous(limits = c(0.96, 1.04),  breaks = seq(0.96, 1.04, 0.01)) +
+  #geom_vline(xintercept = mean(wine$fixed.acidity), color='red', size=2) +
+  #geom_vline(xintercept = median(wine$fixed.acidity), color='orange', size=2) +
+  ylab('Count') +
+  scale_y_continuous(labels = function(x) format(x, big.mark = ",", 
+                                                 scientific=FALSE)) +
+  ggtitle('Distribution of Water Density') +
+  theme(plot.title = element_text(hjust = 0.5, size=15))
+
+
+```
+
+
+```{r}
+
+summary(wine$density)
+
+```
+
+
+> Water density is cocentrated between 0.99 and 1 g/cm^3
+
+
+
+```{r echo=FALSE}
+
+ggplot(data=wine, aes(x=pH)) +
+  geom_histogram(fill=I('#0000FF'), color='white', bins=100) + #binwidth = 5) +
+  xlab('pH') +
+  scale_x_continuous(breaks=seq(2.5, 4.5, 0.10)) +
+  #geom_vline(xintercept = mean(wine$fixed.acidity), color='red', size=2) +
+  #geom_vline(xintercept = median(wine$fixed.acidity), color='orange', size=2) +
+  ylab('Count') +
+  scale_y_continuous(labels = function(x) format(x, big.mark = ",", 
+                                                 scientific=FALSE)) +
+  ggtitle('Distribution of pH') +
+  theme(plot.title = element_text(hjust = 0.5, size=15))
+
+```
+
+```{r echo=FALSE}
+
+summary(wine$pH)
+
+```
+
+> The distrution of pH is approximately normal. There don't appear to be 
+many outliers. 
+
+
+```{r echo=FALSE}
+
+ggplot(data=wine, aes(x=sulphates)) +
+  geom_histogram(fill=I('#0000FF'), color='white', bins=100) + #binwidth = 5) +
+  xlab('Sulphates (g /'~dm^3~')') +
+  scale_x_continuous() +
+  #geom_vline(xintercept = mean(wine$fixed.acidity), color='red', size=2) +
+  #geom_vline(xintercept = median(wine$fixed.acidity), color='orange', size=2) +
+  ylab('Count') +
+  scale_y_continuous(labels = function(x) format(x, big.mark = ",", 
+                                                 scientific=FALSE)) +
+  ggtitle('Distribution of Potassium Sulphate') +
+  theme(plot.title = element_text(hjust = 0.5, size=15))
+
+```
+
+```{r echo=FALSE}
+
+summary(wine$sulphates)
+
+
+```
+
+> This distribution is positively skewed with serveral outliers over double the 
+IQR distance from the 75th percentile. 
+
+
+```{r echo=FALSE}
+
+ggplot(data=wine, aes(x=alcohol)) +
+  geom_histogram(fill=I('#FF3300'), color='black', bins=80) + #binwidth = 5) +
+  xlab('Alcohol %') +
+  scale_x_continuous(breaks = seq(8, 14, 0.5)) +
+  #geom_vline(xintercept = mean(wine$fixed.acidity), color='red', size=2) +
+  #geom_vline(xintercept = median(wine$fixed.acidity), color='orange', size=2) +
+  ylab('Count') +
+  scale_y_continuous(labels = function(x) format(x, big.mark = ",", 
+                                                 scientific=FALSE)) +
+  ggtitle('Distribution of Alcohol %') +
+  theme(plot.title = element_text(hjust = 0.5, size=15))
+
+
+```
+
+```{r echo=FALSE}
+
+summary(wine$alcohol)
+
+```
+
+> Alcohol% seems to be distributed in periodic clusters. 
+
+
+```{r echo=FALSE}
+
+ggplot(data=wine, aes(x=quality)) +
+  geom_histogram(fill=I('#FF0099'), color='white', binwidth=1) + #binwidth = 5) +
+  xlab('Quality Score') +
+  scale_x_continuous(breaks = seq(3,10,1)) +
+  #geom_vline(xintercept = mean(wine$fixed.acidity), color='red', size=2) +
+  #geom_vline(xintercept = median(wine$fixed.acidity), color='orange', size=2) +
+  ylab('Count') +
+  scale_y_continuous(labels = function(x) format(x, big.mark = ",", 
+                                                 scientific=FALSE)) +
+  ggtitle('Distribution Quality Score') +
+  theme(plot.title = element_text(hjust = 0.5, size=15))
+
+
+```
+
+```{r echo=TRUE}
+
+table(wine$quality)
+
+```
+
+```{r echo=FALSE}
+
+summary(wine$quality)
+
+```
+
+> The quality score is score is normally distributed with slightly more wines 
+tending towards the lower end. 
+
+
+
+
+
+```{r echo=FALSE}
+
+c = wine %>% 
+  dplyr::select(color) %>% 
+  dplyr::group_by(color) %>% 
+  dplyr::summarise(n = n())
+
+
+```
+
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+ggplot(data=c, aes(x=color)) +
+  geom_bar(aes(weight = n, fill=color), name='Wine Color') +
+  xlab('Wine Color') +
+  ylab('Count') +
+  scale_y_continuous(labels = function(x) format(x, big.mark = ",", 
+                                                 scientific=FALSE)) +   
+  ggtitle('Number of Wines for Each Color') +
+  theme(plot.title = element_text(hjust = 0.5, size=15))
+
+```
+
+
+
+
+## Univariate Analysis
+
+> This dataset originally consisted of 6,497 rows and 12 columns with more 
+than twice as many white wines as reds. 
+
+> There were no missing values. All 12 variables were numerical, including the 
+quality score, which was integer valued. I did create a 13th variable, color, 
+which describes the color of the wine, and a 14th variable later on which 
+asssigns 1 to red wines and 0 to whites. 
+
+> The vast majority of wine samples scored a 5 through 7.
+I plotted the distributions of all numerical variables and noticed that 
+virtually all of them were positively skewed except for pH, Density and Quality Score, which appeared normally distributed. 
+
+> Alcohol was positively skewed, with a shorter peak count than other variables,
+a slow decay and periodic near zero counts approximately 0.75 percentage 
+points apart. There were also no perfect or abhorrant tasting wine samples, all quality scores ranged between 3 and 9. All but 35 scored between 4 and 8. 
+
+> The main features I will focus on in this investigation will be: 
+Quality Score, Alcohol%, pH, Fixed Acidity, Sulfur Dioxide (Total,Free), 
+Density, Chlorides and Residual Sugar. 
+
+> I noticed that virtually all of the postitively skewed histograms contained
+extreme outliers, and they were highlighted after taking Log10 transformations.
+This begs the question, are these outliers generated by the same wine samples? 
+
+> Lucikly this data set was tidy so it did not require any cleaning. 
+
+
+# Bivariate Plots 
+
+
+```{r echo=FALSE}
+
+ggpairs(data=wine[, -c(1, 2, 3, 10, 13)]) +
+  ggtitle('Pair Plots Between Wine Features') +
+  theme(plot.title = element_text(hjust = 0.5, size=15))
+
+
+```
+
+
+> Lets look at pairsiwe correlations more closely. 
+
+```{r echo=TRUE}
+
+
+cor(wine[, -c(1, 2, 3, 10, 13)])
+
+
+```
+
+> For the most part, most of this data does not look very hightly correlated (pairwise). 
+
+> A few exceptions include: total sulfur dioxide vs. free sulfur dioxide (0.72)
+and water density vs alcohol % (-0.68).
+
+
+
+```{r echo=FALSE}
+
+ggplot(data=wine, aes(x=free.sulfur.dioxide, total.sulfur.dioxide)) +
+  geom_point(color='#FF66FF', alpha=0.7) +
+  geom_smooth(method='lm', se=FALSE) +
+  xlab('Free Sulfur Dioxide('~mg/dm^3~')') +
+  ylab('Total Sulfur Dioxide ('~mg/dm^3~')') +
+  ggtitle('Total Sulfur Dioxide vs. Free Sulfur Dioxide') +
+  theme(plot.title = element_text(hjust = 0.5, size=15))
+
+
+
+```
+
+ 
+```{r echo=TRUE}
+
+cor(wine$total.sulfur.dioxide, wine$free.sulfur.dioxide)
+
+```
+
+> It looks like the outilier for both of these variables is attributable to 
+one sameple. 
+
+
+
+```{r echo=FALSE}
+
+
+ggplot(data=wine, aes(x=pH, y=fixed.acidity)) +
+  geom_point(alpha=0.3, color='blue')+ 
+  geom_smooth(method='lm', se=FALSE, col='red') +
+  xlab('pH') +
+  ylab('Fixed Acidity ('~g/dm^3~')') +
+  ggtitle('Fixed Acidity vs. pH') +
+  theme(plot.title = element_text(hjust = 0.5, size=15))
+
+
+
+```
+
+> This plot looks like it contains two intersecting gropus (perhaps red and 
+white wines), which, if independently considered, could make Alcohol% and pH 
+more corrleated than they currently appear. The regression line is more heavily
+weighed by the lower "chunk". 
+
+
+
+```{r echo=TRUE}
+
+cor(wine$pH, wine$fixed.acidity)
+
+
+```
+
+
+
+```{r echo=FALSE}
+
+ggplot(data=wine, aes(x=color, y=alcohol)) +
+    geom_jitter(alpha=0.1) +
+  geom_boxplot(aes(fill=color), color='blue', alpha=0.6) +
+  stat_summary(fun.y='mean', geom='point', color='red', shape=8, size=5) +
+  xlab('Wine Color') +
+  ylab('Alcohol %') +
+  ggtitle('Alcohol% Between Wine Colors') +
+  guides(fill=guide_legend('Wine Color')) +
+  theme(plot.title = element_text(hjust = 0.5, size=15))
+
+```
+
+> Both wine colors have similar Alcohol% distributions. The IQR of white wines
+is sligthly greater than red wines. There are clearly a higher proportion of
+low alcohol% wines in the white samples yet both colors were slighlty,
+positively skewed.
+
+
+
+
+```{r echo=FALSE}
+
+ggplot(data=wine, aes(x=factor(quality), y=alcohol)) +
+  geom_jitter(alpha=0.15) +
+  geom_boxplot(color='purple', alpha=0.7) +
+  stat_summary(fun.y='mean', geom='point', color='red', fill='red',
+               shape=8, size=5) +
+  xlab('Quality Score') +
+  ylab('Alcohol %') +
+  ggtitle('Alcohol% Between Quality Scores') +
+  guides(fill=guide_legend('Wine Color')) +
+  theme(plot.title = element_text(hjust = 0.5, size=15))
+
+```
+
+```{r echo=TRUE}
+
+cor(wine$alcohol, wine$quality)
+
+```
+
+
+> Alcohol% is moderately correlated with quality. Top quality samples had
+a tendency to be negatively skewed. 
+
+
+
+
+```{r echo=FALSE}
+
+ggplot(data=wine, aes(x=color, y=residual.sugar)) +
+  geom_jitter(alpha=0.2) + 
+  geom_boxplot(aes(fill=color), color='blue', alpha=0.7) +
+  stat_summary(fun.y='mean', geom='point', color='red', shape=8, size=5) +
+  xlab('Wine Color') +
+  ylab('Residual Sugar ('~g/dm^3~')') +
+  scale_y_continuous(breaks=seq(0,70,10)) +
+  ggtitle('Boxplots of Residual Sugar Between Wine Colors') +
+    guides(fill=guide_legend('Wine Color')) +
+  theme(plot.title = element_text(hjust = 0.5, size=15))
+
+
+
+```
+
+
+> Clearly white wines are sweeter on average. The variance of residual sugar is
+much smaller for red wines.  
+
+
+
+```{r echo=FALSE}
+
+ggplot(data=wine, aes(x=factor(quality), y=residual.sugar)) +
+  geom_jitter(alpha=0.2) +
+  geom_boxplot(color='purple', alpha=0.7) +
+  stat_summary(fun.y='mean', shape=8, size=5, color='red', geom='point') +
+  xlab('Quality Score') +
+  ylab('Residual Sugar ('~g/dm^3~')') +
+  scale_y_continuous(breaks=seq(0,70,10)) +
+  ggtitle('Residual Sugars Between Quality Scores') +
+    guides(fill=guide_legend('Wine Color')) +
+  theme(plot.title = element_text(hjust = 0.5, size=15))
+
+
+
+```
+
+
+```{r echo=TRUE}
+
+cor(wine$residual.sugar, wine$quality)
+
+```
+
+> Residual sugars appear similarly distributed accross quality scores. Sugar and
+quality are almost independent to one another. 
+
+
+```{r echo=FALSE}
+
+ggplot(data=wine, aes(x=color, y=pH)) +
+  geom_jitter(alpha=0.2) +
+  geom_boxplot(aes(fill=color), color='blue', alpha=0.7) +
+  stat_summary(fun.y='mean', shape=8, size=5, color='red', geom='point') +  
+  xlab('Wine Color') +
+  ylab('pH') +
+  scale_y_continuous(breaks=seq(2.5, 4.3, 0.2), limits = c(2.7, 4.1)) +
+  ggtitle('Boxplots of pH Between Wine Colors') +
+    guides(fill=guide_legend('Wine Color')) +
+  theme(plot.title = element_text(hjust = 0.5, size=15))
+
+```
+
+> Clearly red wine has a tendency towards a higher pH, its median pH is greater
+than the 75th percentile pH for white wines. 
+
+
+
+
+```{r echo=FALSE}
+
+ggplot(data=wine, aes(x=factor(quality), y=pH)) +
+  geom_jitter(alpha=0.2) +
+  geom_boxplot(color='purple', alpha=0.7) +
+  stat_summary(fun.y='mean', shape=8, size=5, color='red', geom='point') +    
+  xlab('Quality Score') +
+  ylab('pH') +
+  scale_y_continuous(breaks=seq(2.5, 4.3, 0.2), limits = c(2.7, 4.1)) +
+  ggtitle('pH Beteween Quality Scores') +
+    guides(fill=guide_legend('Wine Color')) +
+  theme(plot.title = element_text(hjust = 0.5, size=15))
+
+```
+
+```{r echo=TRUE}
+
+cor(wine$pH, wine$quality)
+
+```
+
+
+> pH is relatively evenly distributed accross quality scores. 
+
+
+
+```{r echo=FALSE}
+
+
+ggplot(data=wine, aes(x=fixed.acidity, y=density)) +
+  geom_point(color= '#FF3366', alpha=0.6)+ 
+  geom_smooth(method='lm', se=FALSE) +
+  xlab('Fixed Acidity ('~g/dm^3~')') +
+  scale_x_continuous(breaks=seq(3,15, 1)) +
+  ylab('Density ('~g/cm^3~')') +
+  ggtitle('Density vs. Fixed Acidity') +
+  theme(plot.title = element_text(hjust = 0.5, size=15))
+
+
+```
+
+
+
+```{r echo=TRUE}
+
+cor(wine$fixed.acidity, wine$density)
+
+```
+
+> Fixed Acidity and Water Density are moderately correlated with one another. 
+A couple of the outliers are visible on the Density axis. 
+
+
+
+```{r echo=FALSE}
+
+
+ggplot(data=wine, aes(x=alcohol, y=density)) +
+  geom_point(color='#FF9933')+ 
+  geom_smooth(method='lm', se=FALSE) +
+  xlab('Alcohol%') +
+  scale_x_continuous(breaks=seq(7,15, 1)) +
+  ylab('Density ('~g/cm^3~')') +
+  ggtitle('Density vs. Alcohol%') +
+  theme(plot.title = element_text(hjust = 0.5, size=15))
+
+
+
+```
+
+
+```{r echo=TRUE}
+
+cor(wine$density, wine$alcohol)
+
+```
+
+> Density and Alcohol are quite correlated. The discrete, periodic alcohol percentages are visible along the x-axis. This makes sense, naturally more
+alcohol would relace water as the ABV increases. 
+
+
+
+```{r echo=FALSE}
+
+
+ggplot(data=wine, aes(x=chlorides, y=residual.sugar)) +
+  geom_point(color='orange', alpha=0.2)+ 
+  geom_smooth(method='lm', se=FALSE) +
+  theme_dark() +
+  xlab('Chrlorides('~g/dm^3~')') +
+  scale_x_continuous(breaks = seq(0, 0.7, 0.1)) +
+  ylab('Density('~g/dm^3~')') +
+  ggtitle('Residual Sugar vs. Chrlorides') +
+  theme(plot.title = element_text(hjust = 0.5, size=15))
+
+
+
+
+```
+
+> Just like the Fixed Acidity/pH plot, this plot appears to be the intersection
+of two seperate "chunks" that are represented by red and white wines. 
+
+
+
+## Bivariate Analysis
+
+> The strongest linear relationships are between Water Density/Alcohol% (-0.687 correlation), Density/Fixed Acidity (0.459 correlation) and 
+Quality Score/Alcohol% (0.444 correlation), Total Sulfur Dioxide/Free Sulfur 
+Dioxide (0.721). 
+
+> There is a significant difference in median alcohol percentages and quality 
+scores that is highlighted by the boxplots. 
+
+> White wine samples had a tendency to be much sweeter than red wine samples. 
+However it's not very affective when accounting for quality, the median 
+sweetness was uniform accross scores. The same can be said about pH.
+
+> I can't say that I was totally surprised by the higher quality samples
+containing more alcohol by volume. The negative skews in the higher rated
+samples indicate that there are tasty lower ABV wines too. 
+
+
+
+# Multivariate Plots
+
+
+
+```{r echo=FALSE}
+
+ggplot(data=wine, aes(x=factor(quality), y=alcohol)) +
+  geom_boxplot(aes(fill=color)) +
+  stat_summary(fun.y='mean',geom='point', color='blue', shape=8, size=5) +
+  xlab('Quality Score') +
+  ylab('Alcohol %') +
+  ggtitle('Boxplots of Alcohol% Between Quality Scores and Wine Colors') +
+  guides(fill=guide_legend('Wine Color')) +
+  theme(plot.title = element_text(hjust = 0.5, size=15))
+
+```
+
+> Here, we see that accross quality scores, white wines tended to contain 
+slightly smaller amounts of alcohol on averge. This is true except for 
+score 3 samples which saw white wines containing significantly more alcohol
+than reds. 
+
+
+```{r echo=FALSE}
+
+
+ggplot(data=wine, aes(x=alcohol, y=density)) +
+  geom_point(aes(color=color), alpha=0.4)+
+  geom_smooth(method='lm', se=FALSE, color='red') +
+  theme_dark() +
+  xlab('Alcohol%') +
+  scale_x_continuous(breaks=seq(7,15, 1)) +
+  coord_cartesian(ylim = c(0.98, 1.02)) +
+  ylab('Density ('~g/cm^3~')') +
+  facet_wrap(~quality) +
+  ggtitle('Density vs. Alcohol%:\nFaceted by Quality Score') +
+  theme(plot.title = element_text(hjust = 0.5, size=15))
+
+
+
+```
+
+> The linear relationship between Density and Acohol% remains consistent 
+accross scores. 
+
+
+```{r echo=FALSE}
+
+ggplot(data=wine, aes(x=chlorides, y=residual.sugar)) +
+  geom_point(aes(color=factor(quality)), alpha=0.4) +
+  facet_wrap(~color) +
+  geom_smooth(method='lm', se=TRUE, col='red') +
+  #  scale_color_brewer(type = 'div',
+  #                    palette='Set1', breaks=seq(3,9,1),
+  #                   guide = guide_legend(title = 'Quality Score', reverse =F)) +
+                                      #override.aes = list(alpha = 0.5, size = 2)))+ 
+  theme_dark() +
+  scale_color_brewer(palette = 'RdYlGn', name='Alcohol %') +
+  xlab('Chlorides (g /'~dm^3~')') +
+  scale_x_continuous(breaks = seq(0, 0.6, 0.1)) +
+  coord_cartesian(ylim = c(0, 30), xlim=c(0, 0.4)) +
+  ylab('Residual Sugar') +
+  ggtitle('Residual Sugar vs. Chlorides vs. Alcohol%:\nFaceted by Color') +
+  #    guides(fill=guide_legend('Quality Score')) +
+  theme(plot.title = element_text(hjust = 0.5, size=15))
+  #  scale_fill_manual(name='Quality Score')
+
+
+
+```
+
+> In this chart, I wanted to see if there was any relationship between saltiness
+and sweetness. I scaled down the coordinates to remove any of the extreme 
+outliers. It turns out that the super sweet wines were white while most of 
+the salty outliers were from red samples. 
+
+
+
+```{r echo=FALSE}
+
+
+ggplot(data=wine, aes(x=pH, y=fixed.acidity)) +
+  geom_point(alpha=0.3, aes(color=factor(quality)))+ 
+  geom_smooth(method='lm', se=TRUE, color='red') +
+  xlab('pH') +
+  ylab('Fixed Acidity ('~g/dm^3~')') +
+  facet_wrap(~color) +
+  theme_dark() +
+  scale_color_brewer(palette = 'RdYlGn', name='Quality Score') +
+  ggtitle('Fixed Acidity vs. pH vs Alcohol%:\nFAceted by Color') +
+  guides(fill=guide_legend('Wine Color')) +
+  theme(plot.title = element_text(hjust = 0.5, size=15))
+
+
+```
+
+> Wine correlation between pH and Fixed Acidity
+
+```{r echo=FALSE}
+
+cor(wine$pH, wine$fixed.acidity)
+
+```
+
+
+```{r echo=FALSE}
+
+red = subset(wine, color=='Red')
+white = subset(wine, color=='White')
+```
+
+
+> Red Wine correlation between pH and Fixed Acidity
+
+```{r echo=FALSE}
+
+cor(red$pH, red$fixed.acidity)
+
+```
+
+> White Wine correlation between pH and Fixed Acidity
+
+```{r echo=FALSE}
+
+cor(white$pH, white$fixed.acidity)
+
+```
+
+> Factoring for color does improve the correlation betwen pH and Fixed Acidity. 
+
+
+
+```{r echo=FALSE}
+
+
+ggplot(data=wine, aes(x=pH, y=alcohol, color=factor(quality))) +
+  geom_point(alpha=0.5, aes(color=factor(quality))) +
+  geom_smooth(method='lm', se=FALSE) +
+  xlab('pH') +
+  ylab('Alcohol %') +
+  theme_dark() +
+  scale_color_brewer(type='seq', palette = 'Set3',
+                     guide=guide_legend(title='Quality')) +
+  #scale_x_continuous(breaks = seq(2.5, 4, 0.25)) +
+  #geom_smooth(aes(color=color), alpha=0.6, 
+  #          stat = 'summary', fun.y='median') +#, name='Color')+     
+  #facet_wrap(~color) +
+  #scale_color_gradientn(colours=rainbow(20)) +
+    ggtitle('Alcohol% vs. pH vs. Quality Score') +
+  guides(fill=guide_legend(title='Wine Color')) +
+  theme(plot.title = element_text(hjust = 0.5, size=15))
+
+
+
+```
+
+```{r echo=TRUE}
+
+cor(wine$alcohol, wine$pH)
+
+```
+
+> We see here that Alcohol% is hardly correlated with pH accross quality
+scores. 
+
+
+```{r echo=FALSE}
+
+
+ggplot(data=wine, aes(x=free.sulfur.dioxide, total.sulfur.dioxide, 
+                      color=color)) +
+  geom_point(aes(color=color), alpha=0.7, size=0.5, name='Wine Color') + 
+  facet_wrap(~quality) +
+  theme_dark() +
+  coord_cartesian(xlim = c(0, 150)) +
+  xlab('Free Sulfur Dioxide('~mg/dm^3~')') +
+  ylab('Total Sulfur Dioxide ('~mg/dm^3~')') +
+  ggtitle('Total Sulfur Dioxide vs. Free Sulfur Dioxide') +
+  theme(plot.title = element_text(hjust = 0.5, size=15))
+
+
+
+```
+
+> Accross the middle 5 quality scores, red wines tended to have a lower Total
+Sulfur Dioxide concentrations than white wines. It's difficutlt to make 
+an assetion with regards to the other scores, there are too few data points. 
+
+
+
+
+## Multivariate Analysis
+
+> In general, white wines were sweeter, lower in acidity and varied more accross scatterplots. This could simply due to there being almost 4x as many white 
+samples as red. I expected to see the quality scores cluster towards certain locations on the scatterplots more consistently (for example in the Alcohol% vs Citric Acid facet grid, higher quality samples did not consistenly appear in 
+portions of the grid apart from the lower scores). 
+
+> However in the Density vs. Alcohol% facet grid, there was a noticeable 
+tendency for the higher quality samples to be situated towards the lower-right portion of the plot, which is partly explained by higher quality wines having 
+higher alcohol%s. 
+
+> After dividing the Fixed Acidity vs. pH plot from the Bivariate Portion into differenct colored plots, it becomes more obvious that the original plot was 
+indeed a combination of two intersecting clusters of separate color classes. 
+In fact, the correlation between Fixed Acidity and pH elevates when considering 
+each wine color seperately. 
+
+> The Total Sulfur Dioxide vs. Free Sulfur Dioxide mainatined their plot shape accross color and quality score afer separation. 
+
+> Below I will perform a quick Logistic Regression Model to try and classify Red wines based on the given data. 
+
+
+
+
+### Extra: Logistic Regression Model (Wine Color Classifier)
+
+
+```{r echo=FALSE}
+wine$red = ifelse(wine$color=='Red', 1, 0)
+
+```
+
+
+
+```{r echo=FALSE}
+
+sample = floor(0.7 * nrow(wine))
+
+```
+
+
+```{r echo=FALSE}
+
+intrain = createDataPartition(y=wine$red, p=0.7, list=FALSE)
+
+
+```
+
+
+```{r echo=FALSE}
+
+training = wine[intrain,]
+
+```
+
+
+```{r echo=FALSE}
+
+testing = wine[-intrain,]
+
+```
+
+
+```{r echo=FALSE}
+
+m = glm(data=training,red~volatile.acidity+residual.sugar+chlorides+free.sulfur.dioxide+total.sulfur.dioxide+density+alcohol, family=binomial('logit'))
+```
+
+> Sulphates, Citric.acid, pH and fixed.acidity were removed due to high p-values
+for their parameter estimations. 
+
+```{r echo=FALSE}
+
+summary(m)
+
+```
+
+
+```{r echo=FALSE}
+
+p = predict(m, newdata = testing, type='response')
+
+
+```
+
+
+```{r echo=FALSE}
+
+pr = prediction(p, testing$red)
+
+```
+
+
+
+```{r echo=FALSE}
+
+wine.pred = rep('White', length(testing$red))
+
+```
+
+
+```{r echo=FALSE}
+
+wine.pred = ifelse(p>0.5, 'Red', 'White')
+#fitted.results = ifelse(p>0.5, 'Red', 0)
+
+```
+
+> Confusion Matrix
+
+```{r echo=FALSE}
+
+table(testing$color, wine.pred)
+
+```
+
+
+
+```{r echo=FALSE}
+
+auc = performance(pr, measure='auc')
+
+```
+
+
+
+```{r echo=FALSE}
+
+paste('Accurary: ', auc@y.values[[1]])
+
+```
+
+
+
+
+
+```{r echo=FALSE}
+
+prf = performance(pr, measure = 'tpr', x.measure = 'fpr')
+
+```
+
+
+> ROC Curve
+
+```{r echo=FALSE}
+
+plot(prf, title = 'ROC Curve')
+
+
+```
+
+### Regression Model Analysis
+
+> There was a high degree of accuracy for this sample model, as seen by the ROC 
+curve and confusion matrix. I ran 5 70%-30% train-test splits. The model 
+accuracy fitted for each of the 5 tests was over 99%. It seems that the 
+variables provided in the dataset were sufficient for classifying wine (at 
+least for this data set). I wonder if post 2009 data and global wine samples 
+would be accurately classified using the model above. 
+
+
+## Summary Plots
+
+### Plot 1
+```{r echo=FALSE}
+
+ggplot(data=wine, aes(x=factor(quality), y=alcohol)) +
+  geom_boxplot(aes(fill=color)) +
+  stat_summary(fun.y='mean',geom='point', color='blue', shape=8, size=5) +
+  xlab('Quality Score') +
+  ylab('Alcohol %') +
+  ggtitle('Boxplots of Alcohol% Between Quality Scores and Wine Colors') +
+  guides(fill=guide_legend('Wine Color')) +
+  theme(plot.title = element_text(hjust = 0.5, size=15))
+
+```
+
+> This plot shows that lower quality wines had relatively similar median Alcohol percentages, but after 5, they rose consistently. It seemes that one way to 
+increase one's score is to increase the volume of alcohol, no matter the 
+intended color of wine. 
+
+
+### Plot 2
+```{r echo=FALSE}
+
+ggplot(data=wine, aes(x=factor(quality), y=residual.sugar)) +
+  geom_jitter(alpha=0.2) +
+  geom_boxplot(color='purple', alpha=0.7) +
+  stat_summary(fun.y='mean', shape=8, size=5, color='red', geom='point') +
+  xlab('Quality Score') +
+  ylab('Residual Sugar ('~g/dm^3~')') +
+  scale_y_continuous(breaks=seq(0,70,10)) +
+  ggtitle('Residual Sugars Between Quality Scores') +
+    guides(fill=guide_legend('Wine Color')) +
+  theme(plot.title = element_text(hjust = 0.5, size=15))
+
+
+
+```
+
+> This plot demonstates that overall sweetness was not really a factor in 
+the scoring of wine samples. We see that the Residual Sugar distributions are positively skewed accross qualities. In fact, the mean and median sugar amounts
+accross scores was almost equivalent. 
+
+
+### Plot 3
+
+```{r echo=FALSE}
+
+
+ggplot(data=wine, aes(x=pH, y=fixed.acidity)) +
+  geom_point(alpha=0.5, aes(color=factor(quality)))+ 
+  geom_smooth(method='lm', se=TRUE, color='red') +
+  xlab('pH') +
+  ylab('Fixed Acidity ('~g/dm^3~')') +
+  facet_wrap(~color) +
+  theme_dark() +
+  scale_color_brewer(palette = 'RdYlGn', name='Quality Score') +
+  ggtitle('Fixed Acidity vs. pH vs Alcohol%:\nFAceted by Color') +
+  guides(fill=guide_legend('Wine Color')) +
+  theme(plot.title = element_text(hjust = 0.5, size=15))
+
+
+```
+
+> This plot demonstrates the effectiveness of separting the Fixed Acidity vs. pH scatterplots into separate color classes. The correlation between the two 
+variables was increased for both red and white wines after separation. 
+
+
+## Reflection
+
+> Wine samples with a higher Alcohol % scored better, to my complete and utter surprise (sarcasm). Quality scores remained within a relatively small range(4-8)
+with only 35 samples scoring a 3 or 9. In a future analysis, focusing on each 
+feature individually would possibly lead to the realization that quality scores 
+are arrived at focusinf on different features between wine colors (apart from alcohol%).  
+
+> Luckly I did not suffer through much data cleansing while preparing this 
+dataset, it was very, very tidy.
+
+> It was impractical to predict the quality score using a multiple regression 
+model, due to its categorical nature. Instead I went for a logistic regression 
+model to predict wine color instead of quality score. The model had a very high accuracy after multiple runs of Train-Test splits. Red and white wines really 
+do have distinctive characteristics when their compositions are scrutinized. 
+
+> Another difficulty was choosing which plots to pick. The only feature I knew 
+about was the acohol content. It can be overwhelming to try and select Bivariate
+and Multivariate plots without dowmain knowledge going into the analysis and the
+fact that there are > Nc2 possible plot combinations. 
+
+> This dataset could definitley be enriched with Pre and Post 2009 samples and 
+winery location. It would be interesting to see how quality 
+scores and chemical quantities vary from wine to wine over time, seasonally, 
+and accross geographic regions.
